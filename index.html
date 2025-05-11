@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Spider Solitaire - Clone Win7</title>
+  <style>
+    body {
+      background-color: #2e8b57;
+      font-family: 'Segoe UI', sans-serif;
+      color: white;
+      text-align: center;
+      margin: 0;
+    }
+
+    h1 {
+      margin-top: 10px;
+    }
+
+    .controls {
+      margin: 15px;
+    }
+
+    button {
+      margin: 5px;
+      padding: 10px 20px;
+      font-size: 16px;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+
+    #game-board {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      padding: 20px;
+    }
+
+    .column {
+      width: 100px;
+      min-height: 400px;
+      position: relative;
+    }
+
+    .card {
+      width: 80px;
+      height: 120px;
+      background-color: white;
+      color: black;
+      border: 1px solid #000;
+      border-radius: 5px;
+      position: absolute;
+      left: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-weight: bold;
+      box-shadow: 2px 2px 5px rgba(0,0,0,0.4);
+      transition: top 0.3s ease;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .card.face-down {
+      background-color: navy;
+      color: navy;
+      cursor: default;
+    }
+
+    .stock {
+      margin: 15px;
+    }
+
+    .highlight {
+      outline: 3px solid yellow;
+    }
+  </style>
+</head>
+<body>
+  <h1>Spider Solitaire</h1>
+  <div class="controls">
+    <button onclick="startGame(1)">1 couleur</button>
+    <button onclick="startGame(2)">2 couleurs</button>
+    <button onclick="startGame(4)">4 couleurs</button>
+    <button onclick="resetGame()">Nouvelle Partie</button>
+  </div>
+  <div id="game-board"></div>
+  <div class="stock">
+    <button onclick="dealNextRow()">Tirer</button>
+  </div>
+
+  <script>
+    let deck = [];
+    let columns = [];
+    let completed = 0;
+    let colorCount = 1;
+    let selected = null;
+
+    function startGame(colors) {
+      colorCount = colors;
+      completed = 0;
+      selected = null;
+      deck = generateDeck(colors);
+      shuffle(deck);
+      dealInitialCards();
+    }
+
+    function resetGame() {
+      document.getElementById("game-board").innerHTML = "";
+      startGame(colorCount);
+    }
+
+    function generateDeck(colors) {
+      const suits = ['♠', '♥', '♦', '♣'].slice(0, colors);
+      let cards = [];
+      for (let i = 0; i < 8; i++) {
+        suits.forEach(suit => {
+          for (let val = 1; val <= 13; val++) {
+            cards.push({ value: val, suit, faceUp: false, id: crypto.randomUUID() });
+          }
+        });
+      }
+      return cards;
+    }
+
+    function shuffle(array) {
+      for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+      }
+    }
+
+    function dealInitialCards() {
+      columns = Array.from({ length: 10 }, () => []);
+      for (let r = 0; r < 5; r++) {
+        for (let c = 0; c < 10; c++) {
+          let card = deck.pop();
+          card.faceUp = r === 4;
+          columns[c].push(card);
+        }
+      }
+      render();
+    }
+
+    function dealNextRow() {
+      if (deck.length < 10) {
+        alert("Plus assez de cartes.");
+        return;
+      }
+      for (let i = 0; i < 10; i++) {
+        const card = deck.pop();
+        card.faceUp = true;
+        columns[i].push(card);
+      }
+      render();
+    }
+
+    function render() {
+      const board = document.getElementById("game-board");
+      board.innerHTML = "";
+      columns.forEach((column, colIndex) => {
+        const colDiv = document.createElement("div");
+        colDiv.className = "column";
+
+        column.forEach((card, idx) => {
+          const cardDiv = document.createElement("div");
+          cardDiv.className = "card";
+          cardDiv.style.top = `${idx * 25}px`;
+          cardDiv.dataset.col = colIndex;
+          cardDiv.dataset.index = idx;
+
+          if (!card.faceUp) {
+            cardDiv.classList.add("face-down");
+          } else {
+            cardDiv.textContent = getCardText(card);
+            cardDiv.addEventListener("click", () => selectCard(colIndex, idx));
+          }
+
+          if (selected && selected.col == colIndex && selected.index == idx) {
+            cardDiv.classList.add("highlight");
+          }
+
+          colDiv.appendChild(cardDiv);
+        });
+
+        board.appendChild(colDiv);
+      });
+
+      checkCompleted();
+    }
+
+    function getCardText(card) {
+      const names = {1: 'A', 11: 'J', 12: 'Q', 13: 'K'};
+      return `${names[card.value] || card.value}${card.suit}`;
+    }
+
+    function selectCard(colIndex, idx) {
+      const stack = columns[colIndex].slice(idx);
+      if (!isDescending(stack)) return;
+
+      if (selected) {
+        const toCol = colIndex;
+        moveStack(selected.col, selected.index, toCol);
+        selected = null;
+        render();
+      } else {
+        selected = { col: colIndex, index: idx };
+        render();
+      }
+    }
+
+    function isDescending(cards) {
+      for (let i = 0; i < cards.length - 1; i++) {
+        if (!cards[i].faceUp || !cards[i+1].faceUp) return false;
+        if (cards[i].value !== cards[i+1].value + 1) return false;
+        if (cards[i].suit !== cards[i+1].suit) return false;
+      }
+      return true;
+    }
+
+    function moveStack(fromCol, fromIdx, toCol) {
+      if (fromCol === toCol) return;
+
+      const movingStack = columns[fromCol].slice(fromIdx);
+      const targetCol = columns[toCol];
+      const topTarget = targetCol[targetCol.length - 1];
+
+      if (targetCol.length === 0 || (topTarget.faceUp && topTarget.value === movingStack[0].value + 1)) {
+        columns[toCol] = targetCol.concat(movingStack);
+        columns[fromCol] = columns[fromCol].slice(0, fromIdx);
+        const last = columns[fromCol][columns[fromCol].length - 1];
+        if (last) last.faceUp = true;
+      }
+    }
+
+    function checkCompleted() {
+      columns.forEach((col, i) => {
+        if (col.length < 13) return;
+        const last13 = col.slice(-13);
+        if (isDescending(last13) && last13[0].value === 13 && last13[12].value === 1) {
+          columns[i] = col.slice(0, col.length - 13);
+          completed++;
+          alert("Suite complétée !");
+          if (completed === 8) {
+            alert("Victoire !");
+          }
+        }
+      });
+    }
+
+    startGame(1);
+  </script>
+</body>
+</html>
