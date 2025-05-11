@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <title>Spider Solitaire - Clone Win7</title>
+  <title>Spider Solitaire - Glisser-Déposer</title>
   <style>
     body {
       background-color: #2e8b57;
@@ -12,11 +12,7 @@
       margin: 0;
     }
 
-    h1 {
-      margin-top: 10px;
-    }
-
-    .controls {
+    .controls, .stock {
       margin: 15px;
     }
 
@@ -24,8 +20,8 @@
       margin: 5px;
       padding: 10px 20px;
       font-size: 16px;
-      border: none;
       border-radius: 5px;
+      border: none;
       cursor: pointer;
     }
 
@@ -40,6 +36,9 @@
       width: 100px;
       min-height: 400px;
       position: relative;
+      background-color: rgba(255,255,255,0.1);
+      border: 1px solid white;
+      border-radius: 5px;
     }
 
     .card {
@@ -55,10 +54,10 @@
       justify-content: center;
       align-items: center;
       font-weight: bold;
-      box-shadow: 2px 2px 5px rgba(0,0,0,0.4);
-      transition: top 0.3s ease;
       cursor: pointer;
+      box-shadow: 2px 2px 5px rgba(0,0,0,0.4);
       user-select: none;
+      transition: top 0.3s;
     }
 
     .card.face-down {
@@ -67,12 +66,8 @@
       cursor: default;
     }
 
-    .stock {
-      margin: 15px;
-    }
-
-    .highlight {
-      outline: 3px solid yellow;
+    .card.dragging {
+      opacity: 0.5;
     }
   </style>
 </head>
@@ -90,16 +85,11 @@
   </div>
 
   <script>
-    let deck = [];
-    let columns = [];
-    let completed = 0;
-    let colorCount = 1;
-    let selected = null;
+    let deck = [], columns = [], completed = 0, colorCount = 1;
 
     function startGame(colors) {
       colorCount = colors;
       completed = 0;
-      selected = null;
       deck = generateDeck(colors);
       shuffle(deck);
       dealInitialCards();
@@ -112,7 +102,7 @@
 
     function generateDeck(colors) {
       const suits = ['♠', '♥', '♦', '♣'].slice(0, colors);
-      let cards = [];
+      const cards = [];
       for (let i = 0; i < 8; i++) {
         suits.forEach(suit => {
           for (let val = 1; val <= 13; val++) {
@@ -158,28 +148,25 @@
     function render() {
       const board = document.getElementById("game-board");
       board.innerHTML = "";
-      columns.forEach((column, colIndex) => {
+      columns.forEach((col, colIndex) => {
         const colDiv = document.createElement("div");
         colDiv.className = "column";
+        colDiv.dataset.col = colIndex;
+        colDiv.ondragover = e => e.preventDefault();
+        colDiv.ondrop = e => dropCard(e, colIndex);
 
-        column.forEach((card, idx) => {
+        col.forEach((card, i) => {
           const cardDiv = document.createElement("div");
           cardDiv.className = "card";
-          cardDiv.style.top = `${idx * 25}px`;
-          cardDiv.dataset.col = colIndex;
-          cardDiv.dataset.index = idx;
-
+          cardDiv.style.top = `${i * 25}px`;
           if (!card.faceUp) {
             cardDiv.classList.add("face-down");
           } else {
             cardDiv.textContent = getCardText(card);
-            cardDiv.addEventListener("click", () => selectCard(colIndex, idx));
+            cardDiv.setAttribute("draggable", true);
+            cardDiv.ondragstart = e => startDrag(e, colIndex, i);
+            cardDiv.ondragend = e => endDrag(e);
           }
-
-          if (selected && selected.col == colIndex && selected.index == idx) {
-            cardDiv.classList.add("highlight");
-          }
-
           colDiv.appendChild(cardDiv);
         });
 
@@ -194,19 +181,39 @@
       return `${names[card.value] || card.value}${card.suit}`;
     }
 
-    function selectCard(colIndex, idx) {
-      const stack = columns[colIndex].slice(idx);
-      if (!isDescending(stack)) return;
+    let dragData = null;
 
-      if (selected) {
-        const toCol = colIndex;
-        moveStack(selected.col, selected.index, toCol);
-        selected = null;
-        render();
-      } else {
-        selected = { col: colIndex, index: idx };
-        render();
+    function startDrag(e, colIndex, cardIndex) {
+      const stack = columns[colIndex].slice(cardIndex);
+      if (!isDescending(stack)) {
+        e.preventDefault();
+        return;
       }
+      dragData = { fromCol: colIndex, fromIndex: cardIndex };
+      e.target.classList.add("dragging");
+    }
+
+    function endDrag(e) {
+      e.target.classList.remove("dragging");
+    }
+
+    function dropCard(e, toCol) {
+      if (!dragData) return;
+      const { fromCol, fromIndex } = dragData;
+      if (fromCol === toCol) return;
+      const moving = columns[fromCol].slice(fromIndex);
+      const dest = columns[toCol];
+      const last = dest[dest.length - 1];
+
+      if (!dest.length || (last.faceUp && last.value === moving[0].value + 1 && last.suit === moving[0].suit)) {
+        columns[toCol] = dest.concat(moving);
+        columns[fromCol] = columns[fromCol].slice(0, fromIndex);
+        const prev = columns[fromCol][columns[fromCol].length - 1];
+        if (prev) prev.faceUp = true;
+      }
+
+      dragData = null;
+      render();
     }
 
     function isDescending(cards) {
@@ -216,21 +223,6 @@
         if (cards[i].suit !== cards[i+1].suit) return false;
       }
       return true;
-    }
-
-    function moveStack(fromCol, fromIdx, toCol) {
-      if (fromCol === toCol) return;
-
-      const movingStack = columns[fromCol].slice(fromIdx);
-      const targetCol = columns[toCol];
-      const topTarget = targetCol[targetCol.length - 1];
-
-      if (targetCol.length === 0 || (topTarget.faceUp && topTarget.value === movingStack[0].value + 1)) {
-        columns[toCol] = targetCol.concat(movingStack);
-        columns[fromCol] = columns[fromCol].slice(0, fromIdx);
-        const last = columns[fromCol][columns[fromCol].length - 1];
-        if (last) last.faceUp = true;
-      }
     }
 
     function checkCompleted() {
